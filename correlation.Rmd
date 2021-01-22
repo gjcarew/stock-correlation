@@ -1,0 +1,87 @@
+---
+title: "correlation"
+author: "Miley Osiris God of Death"
+date: "10/17/2020"
+output:
+  word_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### Portfolio correlation
+
+When securities in a portfolio show high correlation, risk is amplified since a market shock for any reason is likely to have a large effect on all the securities. Add tickers below to see portfolio correlation.
+```{r}
+my.tickers <- c("DX-Y.NYB", "BTC-USD", "GC=F")
+
+```
+
+## Back-end
+
+These packages help with data science, visualization, and getting financial data from Yahoo Finance's API.  They'll only install once, once they are in your R environment you just have to load them in future sessions.
+```{r}
+ # Install and load required packages
+list.of.packages <- c("tidyverse", "caret", "BatchGetSymbols", "GGally")
+
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages, dependencies = TRUE, repos='http://cran.us.r-project.org')
+
+lapply(list.of.packages, require, character.only = TRUE)
+```
+## Get stock data. 
+You can look at different timescales by changing the first and last date and the frequency.
+```{r}
+first.date <- Sys.Date() - 1825
+last.date <- Sys.Date()
+freq.data <- 'daily'
+
+
+stock.data <- BatchGetSymbols(tickers = my.tickers %>% append("^GSPC"), 
+                         first.date = first.date,
+                         last.date = last.date, 
+                         freq.data = freq.data,
+                         cache.folder = file.path(tempdir(), 
+                                                  'BGS_Cache') ) 
+
+condensed.data <- stock.data$df.tickers %>% 
+  select(ticker, ref.date, price.close) %>% 
+  spread(ticker, price.close) %>% 
+  rename("S&P 500" = `^GSPC`)
+
+```
+## Visualizations
+
+1. Correlation matrix - shows how much each security correlates with each other security. This is a cool chart but don't bother if you have more than 5 or so securities - it's gonna be unreadable
+
+```{r}
+condensed.data %>% select(-ref.date) %>% ggpairs()
+```
+
+2. Stacked line chart. Securities are centered and scaled then plotted-- you can see how they vary over time. If your securities are all moving in the same direction at the same time, it shows high correlation and you may want to diversify your portfolio
+```{r}
+
+# Function to scale each column indvidually
+scale.data.frame <- function(dfr) {
+    if (!is.data.frame(dfr)) {stop("dfr must be a data frame")}
+    x <- dfr
+    cols <- sapply(dfr, is.numeric)
+    scaledvars <- scale.default(dfr[, cols]) 
+    x[, cols] <- scaledvars
+    return(x)
+}
+
+# run scaling function, gather for plotting
+scaled <- condensed.data %>% 
+  scale.data.frame() %>% 
+  gather(key = "ticker", value = "scaled.price", -ref.date)
+
+# Plot
+scaled %>% ggplot(aes(x = ref.date, y = scaled.price, color = ticker)) +
+  geom_line(size = 2, alpha = .5) +
+  labs(title = "Centered and scaled price movements", x = "Date", y = "Scaled price")
+
+```
